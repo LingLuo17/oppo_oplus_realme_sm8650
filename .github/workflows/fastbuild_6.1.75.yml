@@ -300,6 +300,17 @@ jobs:
             cp ./susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
             cd ./common
             patch -p1 -F 3 < 50_add_susfs_in_gki-${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch || true
+            # 新版 BakaSU 已移除 fake_state，selinux_hide 改由内核直接调用 my_write_context/my_write_access/my_setprocattr
+            # 不应用此兼容补丁会在链接阶段报 undefined symbol: fake_state
+            if [[ ${{ github.event.inputs.ksu_type }} == "bakasu" || ${{ github.event.inputs.ksu_type }} == "sukisu" ]]; then
+              echo "正在应用 BakaSU selinux_hide 兼容补丁..."
+              wget https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/other_patch/susfs_selinux_hide_bakasu_compat.patch -O ./susfs_selinux_hide_bakasu_compat.patch
+              patch -p1 -N -F 3 < susfs_selinux_hide_bakasu_compat.patch || true
+              if grep -q "struct selinux_state fake_state" security/selinux/selinuxfs.c; then
+                echo "::error::BakaSU 与 susfs selinux_hide 补丁不兼容（fake_state 仍未解析），请更新 other_patch/susfs_selinux_hide_bakasu_compat.patch"
+                exit 1
+              fi
+            fi
             patch -p1 -N -F 3 < 69_hide_stuff.patch || true
             cd ..
           else
